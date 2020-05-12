@@ -1,0 +1,99 @@
+1) npm i passport passport-local passport-local-mongoose --save express express-session session-file-store
+
+2) Inside UserSchema remove username & password as they are added by passport and add plugin to schema by:
+    UserSchema.plugin(passportLocalMongoose);
+
+3) create new file named authenticate.js and wrtite authentication for UserModel
+    var passport = require('passport');
+    var LocalSrategy = require('passport-local').Strategy;
+    var User = require('./models/User');
+
+    exports.local = passport.use(new LocalSrategy(User.authenticate()));
+    passport.serializeUser(User.serializeUser());
+    passport.deserializeUser(User.deserializeUser());
+
+4) here i assume that we are doing user related stuff like register, login in router so import passport in router.
+
+5) Go to User model and add passport plugin to the user model
+    var passportLocalMongoose = require('passport-local-mongoose');
+    UserSchema.plugin(passportLocalMongoose);
+
+6) Passport uses session to store logged in user session, so initialize app with session-file-store in app.js as below:
+    var session = require("express-session");
+    var fileStore = require("session-file-store")(session);
+    app.use(session({
+        name: 'session-id',
+        secret: 'signed-key',
+        saveUninitialized: false,
+        resave: false,
+        store: new fileStore()
+    }));
+
+7) initialize Passport in app.js, goto app.js write the following
+    const passport = require('passport');
+    app.use(passport.initialize());
+    app.use(passport.session());
+
+8) import passport in userRouter
+    const passport = require("passport")
+
+9) Register User
+    router.post("/register", (req,res) => {
+        try{
+            let user = await User.register(new User({ username: req.body.username }), req.body.password);
+            await user.save();
+            passport.authenticate('local')(req, res, () => {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.json({ success: true, status: 'Signed up sucessfully' })
+            })
+        } catch(error) {
+            res.statusCode = 400;
+            res.send({err: error});
+        }
+    })
+    -> try registering user and see mongo repl
+
+10) before logging in user we have to configure local Strategy in app, create authenticate.js file and write the following,
+    const passport = require("passport")
+    const LocalStrategy = require("passport-local").Strategy;
+    const User = require("./models/User");
+
+    exports.local = passport.use(new LocalStrategy(User.authenticate()));
+    passport.serializeUser(User.serializeUser());
+    passport.deserializeUser(User.deserializeUser());
+
+11) Login User
+    router.post('/login', passport.authenticate('local'), (req,res) => {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.json({ success: true, status: 'Login   Successful!' })
+    })
+12) to logout user simple clear session and cookies as below:
+    router.get("/logout", (req,res) => {
+        req.session.destroy();
+        res.clearCookie('session-id');
+        res.redirect('/');
+    })
+13) after login get passport automatically add user to the session and on every request as below
+    router.get("/getusername", (req,res) => {
+        res.send(req.user);
+    })
+
+13) import authenticate.js file to the app.js so that LocalStrategy get initialize,
+    const authenticate = require("./authenticate");
+
+14) create one middleware that check if user is present in req (added by passport) only than proceed further:
+    const passportAuth = (req, res, next) => {
+        if(!req.user) {
+            var err = new Error('You are not authenticated!');
+            err.status = 401;
+            next(err);
+        } else {
+            next();
+        }
+    }
+15) add passportAuth middleware to the app for user, be sure to add after basic routes like indexroute and userRouter:
+    app.use(passportAuth);
+
+End of Passport Local Strategy

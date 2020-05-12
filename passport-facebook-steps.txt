@@ -1,0 +1,48 @@
+This module thinks that you already have passport local strategy is implemented using JWT.
+1) npm i passport-facebook-token --save
+2) add index.html file with facebook id
+3) add facebookId field in the user model
+4) inside authenticate.js file do the following code
+    // initialize facebook strategy
+    var FacebookTokenStrategy = require('passport-facebook-token');
+
+    // following code will call facebook from clientID, and clientSecret and after authentication get user or create new user with facebook profile-id, givenName and displayName
+
+    exports.facebookPassport = passport.use(
+    new FacebookTokenStrategy(
+        {
+            clientID: config.facebook.clientId, // must be set from application configuration and dynamically
+            clientSecret: config.facebook.clientSecret // must be set from application configuration and dynamically
+        }, (accessToken, refreshToken, profile, done) => {
+            
+            User.findOne({ facebookId: profile.id }, (err, user) => {
+                if(err) return done(err, false);
+                if(!err && user !== null) return done(null, user);
+                else {
+                    user = new User({ username: profile.displayName })
+                    user.facebookId = profile.id;
+                    user.firstname = profile.name.givenName;
+                    user.lastname = profile.name.familyName;
+                    user.save( (err, user) => {
+                        if(err) return done(err, false);
+                        else return done(null, user);
+                    })
+                }
+            })
+        }
+    )
+5) Add route to the users that it'll be called whenever user done authentication by facebook and facebook return accesstoken that need to generate jwt token
+    router.get('/facebook/token', passport.authenticate('facebook-token'), (req,res) => {
+        if(req.user) {
+            var token = authenticate.generateToken({_id: req.user._id });
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.json({ success: true, token, status: 'Login Successful!' })
+        }
+    })
+6) go to index.html file and click on login by facebook, this will authenticate user by facebook and return access-token
+7) return accessToken from facebook used to generate jwt token by our application by step 5
+6) Ways to pass facebook access-token to passport.authenticate('passport-facebook') and obtain json-web-token
+    1. Authorization header = Bearer <Access-Token>
+    2. access_token header = <Access-Token>
+    3. pass to path param url/<Access-Token>
